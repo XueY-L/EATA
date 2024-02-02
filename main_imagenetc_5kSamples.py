@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=2 python3 main_imagenetc_5kSamples.py
+CUDA_VISIBLE_DEVICES=1 python3 main_imagenetc_5kSamples.py
 '''
 
 from logging import debug
@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     subnet = load_model('Standard_R50', './ckpt',
                        'imagenet', ThreatModel.corruptions).cuda()
-    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'gaussian_noise\']_[5].pt')['model'])
+    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'jpeg_compression\']_[3].pt')['model'])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output, exist_ok=True)
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     logger = get_logger(name="project", output_directory=args.output, log_name=time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())+"-log.txt", debug=False)
     
     # ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
-    common_corruptions = ['shot_noise', 'impulse_noise', 'defocus_blur', 'motion_blur', 'zoom_blur', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate']
+    common_corruptions = ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
     logger.info(args)
 
     if args.exp_type == 'continual':  # 在每个域推理完成后，测一下original情况
@@ -190,7 +190,6 @@ if __name__ == '__main__':
     for corrupt in common_corruptions:
         x_test, y_test = load_imagenetc(5000, 5, args.data_corruption, False, [corrupt])
         x_test, y_test = x_test.cuda(), y_test.cuda()
-        print(x_test.size(), y_test.size())
 
         acc = 0.
         n_batches = math.ceil(x_test.shape[0] / args.batch_size)
