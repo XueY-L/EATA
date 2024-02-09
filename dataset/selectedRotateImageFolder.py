@@ -6,6 +6,7 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
@@ -197,3 +198,15 @@ def prepare_test_data(args, use_transforms=True):
     teloader = torch.utils.data.DataLoader(teset, batch_size=args.batch_size, shuffle=args.if_shuffle, 
                                                     num_workers=args.workers, pin_memory=True)
     return teset, teloader
+
+def prepare_cifar100_test_data(args):
+    transforms_test = transforms.Compose([
+         transforms.ToTensor(),
+         transforms.Normalize(
+            mean = [0.5070751592371323, 0.48654887331495095, 0.4409178433670343],
+            std = [0.2673342858792401, 0.2564384629170883, 0.27615047132568404]
+         )
+    ])
+    cifar100_training = torchvision.datasets.CIFAR100(root='/home/yxue/datasets/cifar100', train=True, transform=transforms_test)
+    trainloader = torch.utils.data.DataLoader(cifar100_training, batch_size=args.batch_size, shuffle=args.if_shuffle, num_workers=args.workers)
+    return trainloader

@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=2 python3 main_imagenetc_5kSamples.py
+CUDA_VISIBLE_DEVICES=2 python3 main_cifar100c.py
 '''
 
 from logging import debug
@@ -12,7 +12,7 @@ import math
 
 from utils.utils import get_logger
 from utils.cli_utils import *
-from dataset.selectedRotateImageFolder import prepare_test_data
+from dataset.selectedRotateImageFolder import prepare_test_data, prepare_cifar100_test_data
 
 import torch    
 import torch.nn.functional as F
@@ -24,7 +24,7 @@ import eata
 
 import models.Res as Resnet
 
-from robustbench.data import load_imagenetc
+from robustbench.data import load_cifar100c, load_imagenetc
 from robustbench.utils import load_model
 from robustbench.model_zoo.enums import ThreatModel
 
@@ -43,7 +43,7 @@ def get_args():
     parser.add_argument('--gpu', default=0, type=int, help='GPU id to use.')
     parser.add_argument('--debug', default=False, type=bool, help='debug or not.')
     parser.add_argument('--workers', default=16, type=int, help='number of data loading workers (default: 4)')
-    parser.add_argument('--batch_size', default=50, type=int, help='mini-batch size (default: 64)')
+    parser.add_argument('--batch_size', default=64, type=int, help='mini-batch size (default: 64)')
     parser.add_argument('--if_shuffle', default=False, type=bool, help='if shuffle the test set.')
 
     parser.add_argument('--fisher_clip_by_norm', type=float, default=10.0, help='Clip fisher before it is too large')
@@ -75,6 +75,12 @@ def get_args():
 if __name__ == '__main__':
 
     args = get_args()
+    args.data = '/home/yxue/datasets/cifar100/cifar-100-python'
+    args.data_corruption = '/home/yxue/datasets/CIFAR-100-C'
+    args.batch_size = 50
+    args.e_margin = math.log(100)*0.40
+    args.d_margin = 0.4
+    args.fisher_alpha = 1
 
     # set random seeds
     if args.seed is not None:
@@ -82,9 +88,9 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    subnet = load_model('Standard_R50', './ckpt',
-                       'imagenet', ThreatModel.corruptions).cuda()
-    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'glass_blur\']_[1].pt')['model'])
+    subnet = load_model('Hendrycks2020AugMix_ResNeXt', './ckpt',
+                       'cifar100', ThreatModel.corruptions).cuda()
+    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/cifar/checkpoint/ckpt_cifar100_[\'jpeg_compression\']_[1].pt')['model'])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output, exist_ok=True)
@@ -118,20 +124,20 @@ if __name__ == '__main__':
     elif args.algorithm == 'eata':
         # compute fisher informatrix
         args.corruption = 'original'
-        fisher_dataset, fisher_loader = prepare_test_data(args)
-        fisher_dataset.set_dataset_size(args.fisher_size)
-        fisher_dataset.switch_mode(True, False)
+
+        fisher_loader = prepare_cifar100_test_data(args)
 
         subnet = eata.configure_model(subnet)
         params, param_names = eata.collect_params(subnet)
         ewc_optimizer = torch.optim.SGD(params, 0.001)
         fishers = {}
         train_loss_fn = nn.CrossEntropyLoss().cuda()
-        for iter_, (images, targets) in enumerate(fisher_loader, start=1):      
+        for iter_, (images, targets) in enumerate(fisher_loader, start=1):
+            if iter_ == args.fisher_size // args.batch_size: break  # 用少量样本算fisher
             if args.gpu is not None:
-                images = images.cuda(args.gpu, non_blocking=True)
+                images = images.cuda(non_blocking=True)
             if torch.cuda.is_available():
-                targets = targets.cuda(args.gpu, non_blocking=True)
+                targets = targets.cuda(non_blocking=True)
             outputs = subnet(images)
             _, targets = outputs.max(1)
             loss = train_loss_fn(outputs, targets)
@@ -149,13 +155,14 @@ if __name__ == '__main__':
         logger.info("compute fisher matrices finished")
         del ewc_optimizer
 
-        optimizer = torch.optim.SGD(params, 0.00025, momentum=0.9)
+        optimizer = torch.optim.SGD(params, 0.005, momentum=0.9)
         adapt_model = eata.EATA(subnet, optimizer, fishers, args.fisher_alpha, e_margin=args.e_margin, d_margin=args.d_margin)
     else:
         assert False, NotImplementedError
 
+    args.batch_size = 200
     for corrupt in common_corruptions:
-        x_test, y_test = load_imagenetc(5000, 5, args.data_corruption, False, [corrupt])
+        x_test, y_test = load_cifar100c(10000, 5, '/home/yxue/datasets', False, [corrupt])
         x_test, y_test = x_test.cuda(), y_test.cuda()
 
         acc = 0.
