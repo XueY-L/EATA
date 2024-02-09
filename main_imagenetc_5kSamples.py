@@ -50,7 +50,7 @@ def get_args():
 
     # dataset settings
     parser.add_argument('--level', default=5, type=int, help='corruption level of test(val) set.')
-    parser.add_argument('--corruption', default='gaussian_noise', type=str, help='corruption type of test(val) set.')
+    parser.add_argument('--corruption', default='', type=str, help='corruption type of test(val) set.')
     parser.add_argument('--rotation', default=False, type=bool, help='if use the rotation ssl task for training (this is TTTs dataloader).')
 
     # model name, support resnets
@@ -64,7 +64,7 @@ def get_args():
     
 
     # overall experimental settings
-    parser.add_argument('--exp_type', default='continual', type=str, help='continual or each_shift_reset') 
+    parser.add_argument('--exp_type', default='continual', type=str, help='continual or each_shift_reset')
     # 'cotinual' means the model parameters will never be reset, also called online adaptation; 
     # 'each_shift_reset' means after each type of distribution shift, e.g., ImageNet-C Gaussian Noise Level 5, the model parameters will be reset.
     parser.add_argument('--algorithm', default='eata', type=str, help='eata or eta or tent')  # eta不加权重正则
@@ -84,7 +84,7 @@ if __name__ == '__main__':
 
     subnet = load_model('Standard_R50', './ckpt',
                        'imagenet', ThreatModel.corruptions).cuda()
-    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'glass_blur\']_[1].pt')['model'])
+    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'gaussian_noise\']_[1].pt')['model'])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output, exist_ok=True)
@@ -155,7 +155,7 @@ if __name__ == '__main__':
         assert False, NotImplementedError
 
     for corrupt in common_corruptions:
-        x_test, y_test = load_imagenetc(5000, 5, args.data_corruption, False, [corrupt])
+        x_test, y_test = load_imagenetc(5000, args.level, args.data_corruption, args.if_shuffle, [corrupt])
         x_test, y_test = x_test.cuda(), y_test.cuda()
 
         acc = 0.

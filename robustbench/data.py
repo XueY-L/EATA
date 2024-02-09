@@ -15,7 +15,7 @@ from robustbench.loaders import CustomImageFolder
 
 
 PREPROCESSINGS = {
-    'Res256Crop224': transforms.Compose([transforms.Resize(256),
+    'Res256Crop224': transforms.Compose([# transforms.Resize(256),
                                          transforms.CenterCrop(224),
                                          transforms.ToTensor()]),
     'Crop288': transforms.Compose([transforms.CenterCrop(288),
@@ -162,7 +162,7 @@ def load_imagenetc(
     imagenet = CustomImageFolder(data_folder_path, transforms_test)
 
     test_loader = data.DataLoader(imagenet, batch_size=n_examples,
-                                  shuffle=shuffle, num_workers=2)
+                                  shuffle=shuffle, num_workers=16)
 
     x_test, y_test, paths = next(iter(test_loader))
 
