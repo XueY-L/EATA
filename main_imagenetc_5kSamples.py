@@ -82,9 +82,8 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    subnet = load_model('Standard_R50', './ckpt',
-                       'imagenet', ThreatModel.corruptions).cuda()
-    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'gaussian_noise\']_[1].pt')['model'])
+    subnet = load_model('Standard_R50', './ckpt', 'imagenet', ThreatModel.corruptions).cuda()
+    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'glass_blur\']_[1].pt')['model'])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output, exist_ok=True)
@@ -105,17 +104,7 @@ if __name__ == '__main__':
         assert False, NotImplementedError
     logger.info(common_corruptions)
     
-    if args.algorithm == 'tent':
-        subnet = tent.configure_model(subnet)
-        params, param_names = tent.collect_params(subnet)
-        optimizer = torch.optim.SGD(params, 0.00025, momentum=0.9)
-        adapt_model = tent.Tent(subnet, optimizer)
-    elif args.algorithm == 'eta':
-        subnet = eata.configure_model(subnet)
-        params, param_names = eata.collect_params(subnet)
-        optimizer = torch.optim.SGD(params, 0.00025, momentum=0.9)
-        adapt_model = eata.EATA(subnet, optimizer, e_margin=args.e_margin, d_margin=args.d_margin)
-    elif args.algorithm == 'eata':
+    if args.algorithm == 'eata':
         # compute fisher informatrix
         args.corruption = 'original'
         fisher_dataset, fisher_loader = prepare_test_data(args)
