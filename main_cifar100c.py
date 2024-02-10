@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=2 python3 main_cifar100c.py
+CUDA_VISIBLE_DEVICES=3 python3 main_cifar100c.py
 '''
 
 from logging import debug
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     args = get_args()
     args.data = '/home/yxue/datasets/cifar100/cifar-100-python'
     args.data_corruption = '/home/yxue/datasets/CIFAR-100-C'
-    args.batch_size = 50
+    args.batch_size = 200
     args.e_margin = math.log(100)*0.40
     args.d_margin = 0.4
     args.fisher_alpha = 1
@@ -88,8 +88,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    subnet = load_model('Hendrycks2020AugMix_ResNeXt', './ckpt',
-                       'cifar100', ThreatModel.corruptions).cuda()
+    subnet = load_model('Hendrycks2020AugMix_ResNeXt', './ckpt', 'cifar100', ThreatModel.corruptions).cuda()
     subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/cifar/checkpoint/ckpt_cifar100_[\'jpeg_compression\']_[1].pt')['model'])
 
     if not os.path.exists(args.output):
@@ -111,17 +110,7 @@ if __name__ == '__main__':
         assert False, NotImplementedError
     logger.info(common_corruptions)
     
-    if args.algorithm == 'tent':
-        subnet = tent.configure_model(subnet)
-        params, param_names = tent.collect_params(subnet)
-        optimizer = torch.optim.SGD(params, 0.00025, momentum=0.9)
-        adapt_model = tent.Tent(subnet, optimizer)
-    elif args.algorithm == 'eta':
-        subnet = eata.configure_model(subnet)
-        params, param_names = eata.collect_params(subnet)
-        optimizer = torch.optim.SGD(params, 0.00025, momentum=0.9)
-        adapt_model = eata.EATA(subnet, optimizer, e_margin=args.e_margin, d_margin=args.d_margin)
-    elif args.algorithm == 'eata':
+    if args.algorithm == 'eata':
         # compute fisher informatrix
         args.corruption = 'original'
 
@@ -160,7 +149,6 @@ if __name__ == '__main__':
     else:
         assert False, NotImplementedError
 
-    args.batch_size = 200
     for corrupt in common_corruptions:
         x_test, y_test = load_cifar100c(10000, 5, '/home/yxue/datasets', False, [corrupt])
         x_test, y_test = x_test.cuda(), y_test.cuda()
