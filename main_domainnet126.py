@@ -116,8 +116,8 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source_domain = 'sketch'
-    target_domains = ['clipart', 'real']
+    source_domain = 'real'
+    target_domains = ['painting', 'sketch']
 
     class ImageNormalizer(nn.Module):
         def __init__(self, mean, std):
