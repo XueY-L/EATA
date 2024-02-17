@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=0 python3 main_domainnet126.py
+CUDA_VISIBLE_DEVICES=1 python3 main_domainnet126.py
 '''
 
 from collections import OrderedDict
@@ -116,8 +116,8 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source_domain = 'real'
-    target_domains = ['painting', 'sketch']
+    source_domain = 'sketch'
+    target_domains = ['clipart', 'painting']
 
     class ImageNormalizer(nn.Module):
         def __init__(self, mean, std):
