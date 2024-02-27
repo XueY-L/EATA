@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=1 python3 main_imagenetc_5kSamples_forget.py
+CUDA_VISIBLE_DEVICES=2 python3 main_imagenetc_5kSamples_forget.py
 '''
 
 import copy
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source = 'gaussian_noise'
+    source = 'snow'
     subnet = load_model('Standard_R50', './ckpt', 'imagenet', ThreatModel.corruptions).cuda()
     subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'{source}\']_[1].pt')['model'])
 
