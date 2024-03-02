@@ -52,7 +52,7 @@ def get_args():
     parser.add_argument('--fisher_clip_by_norm', type=float, default=10.0, help='Clip fisher before it is too large')
 
     # dataset settings
-    parser.add_argument('--level', default=5, type=int, help='corruption level of test(val) set.')
+    parser.add_argument('--level', default=1, type=int, help='corruption level of test(val) set.')
     parser.add_argument('--corruption', default='', type=str, help='corruption type of test(val) set.')
     parser.add_argument('--rotation', default=False, type=bool, help='if use the rotation ssl task for training (this is TTTs dataloader).')
 
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source = 'snow'
+    source = 'jpeg_compression'
     subnet = load_model('Standard_R50', './ckpt', 'imagenet', ThreatModel.corruptions).cuda()
     subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'{source}\']_[1].pt')['model'])
 
@@ -94,23 +94,25 @@ if __name__ == '__main__':
 
     logger = get_logger(name="project", output_directory=args.output, log_name=time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())+"-log.txt", debug=False)
     
-    # ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
     common_corruptions = ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
     logger.info(args)
 
     if args.algorithm == 'eata':
         # compute fisher informatrix
-        args.corruption = 'original'
-        fisher_dataset, fisher_loader = prepare_test_data(args)
-        fisher_dataset.set_dataset_size(args.fisher_size)
-        fisher_dataset.switch_mode(True, False)
+        args.corruption = source
+        fisher_loader = load_imagenetc(args.batch_size, 1, args.data_corruption, False, [source])
+        # fisher_dataset, fisher_loader = prepare_test_data(args)
+        # fisher_dataset.set_dataset_size(args.fisher_size)
+        # fisher_dataset.switch_mode(True, False)
 
         subnet = eata.configure_model(subnet)
         params, param_names = eata.collect_params(subnet)
         ewc_optimizer = torch.optim.SGD(params, 0.001)
         fishers = {}
         train_loss_fn = nn.CrossEntropyLoss().cuda()
-        for iter_, (images, targets) in enumerate(fisher_loader, start=1):      
+        for iter_, (images, targets, _) in enumerate(fisher_loader):
+            if iter_ == args.fisher_size // args.batch_size:
+                break
             if args.gpu is not None:
                 images = images.cuda(args.gpu, non_blocking=True)
             if torch.cuda.is_available():
@@ -140,24 +142,20 @@ if __name__ == '__main__':
     dataset = ImageFolder(f'/home/yxue/datasets/ImageNet-C/{source}/1', transforms.Compose([transforms.Resize(256),
                                          transforms.CenterCrop(224),
                                          transforms.ToTensor()]))
-    source_loader = torch.utils.data.DataLoader(dataset, batch_size=50, shuffle=False, num_workers=16)
+    source_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=16)
 
     for i, corrupt in enumerate(common_corruptions):
-        x_test, y_test = load_imagenetc(5000, args.level, args.data_corruption, args.if_shuffle, [corrupt])
-        x_test, y_test = x_test.cuda(), y_test.cuda()
+        test_loader = load_imagenetc(args.batch_size, 5, args.data_corruption, args.if_shuffle, [corrupt])
 
-        acc = 0.
-        n_batches = math.ceil(x_test.shape[0] / args.batch_size)
-        with torch.no_grad():
-            for counter in range(n_batches):
-                x_curr = x_test[counter * args.batch_size:(counter + 1) *
-                        args.batch_size].cuda()
-                y_curr = y_test[counter * args.batch_size:(counter + 1) *
-                        args.batch_size].cuda()
-
-                output = adapt_model(x_curr)
-                acc += (output.max(1)[1] == y_curr).float().sum()
-        print(f'{acc.item() / x_test.shape[0]:.4}')
+        num_cor = 0
+        for data, label, _ in test_loader:
+            data, label = data.cuda(), label.cuda()
+            with torch.no_grad():
+                rst = adapt_model(data)
+            _, predicted = torch.max(rst.data, 1)
+            correct = predicted.eq(label.data).cpu().sum()
+            num_cor += correct
+        print(f'{num_cor/len(test_loader):.4}')
         
         num_cor = 0
         loader = copy.deepcopy(source_loader)

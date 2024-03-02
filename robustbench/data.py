@@ -1,3 +1,4 @@
+import copy
 import os
 from pathlib import Path
 from typing import Callable, Dict, Optional, Sequence, Set, Tuple
@@ -161,12 +162,11 @@ def load_imagenetc(
     data_folder_path = Path(data_dir) / CORRUPTIONS_DIR_NAMES[BenchmarkDataset.imagenet] / corruptions[0] / str(severity)
     imagenet = CustomImageFolder(data_folder_path, transforms_test)
 
-    test_loader = data.DataLoader(imagenet, batch_size=n_examples,
-                                  shuffle=shuffle, num_workers=16)
-
-    x_test, y_test, paths = next(iter(test_loader))
-
-    return x_test, y_test
+    test_loader = data.DataLoader(imagenet, batch_size=n_examples, shuffle=shuffle, num_workers=16)
+    # temp_loader = copy.deepcopy(test_loader)
+    # x_test, y_test, paths = next(iter(temp_loader))
+    # return x_test, y_test, test_loader
+    return test_loader
 
 
 CorruptDatasetLoader = Callable[[int, int, str, bool, Sequence[str]],
