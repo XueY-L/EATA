@@ -85,7 +85,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source = 'jpeg_compression'
+    source = 'gaussian_noise'
     subnet = load_model('Standard_R50', './ckpt', 'imagenet', ThreatModel.corruptions).cuda()
     subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'{source}\']_[1].pt')['model'])
 
@@ -99,11 +99,12 @@ if __name__ == '__main__':
 
     if args.algorithm == 'eata':
         # compute fisher informatrix
-        args.corruption = source
-        fisher_loader = load_imagenetc(args.batch_size, 1, args.data_corruption, False, [source])
-        # fisher_dataset, fisher_loader = prepare_test_data(args)
-        # fisher_dataset.set_dataset_size(args.fisher_size)
-        # fisher_dataset.switch_mode(True, False)
+        # args.corruption = source
+        # fisher_loader = load_imagenetc(args.batch_size, 1, args.data_corruption, False, [source])
+        args.corruption = 'original'
+        fisher_dataset, fisher_loader = prepare_test_data(args)
+        fisher_dataset.set_dataset_size(args.fisher_size)
+        fisher_dataset.switch_mode(True, False)
 
         subnet = eata.configure_model(subnet)
         params, param_names = eata.collect_params(subnet)
@@ -139,10 +140,10 @@ if __name__ == '__main__':
     else:
         assert False, NotImplementedError
 
-    dataset = ImageFolder(f'/home/yxue/datasets/ImageNet-C/{source}/1', transforms.Compose([transforms.Resize(256),
+    dataset = ImageFolder(f'/home/yxue/datasets/ImageNet-C/{source}/1', transforms.Compose([ # transforms.Resize(256),
                                          transforms.CenterCrop(224),
                                          transforms.ToTensor()]))
-    source_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=16)
+    source_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=32)
 
     for i, corrupt in enumerate(common_corruptions):
         test_loader = load_imagenetc(args.batch_size, 5, args.data_corruption, args.if_shuffle, [corrupt])
@@ -155,11 +156,12 @@ if __name__ == '__main__':
             _, predicted = torch.max(rst.data, 1)
             correct = predicted.eq(label.data).cpu().sum()
             num_cor += correct
-        print(f'{num_cor/len(test_loader):.4}')
+        print(f'{num_cor/5000*100:.4}')
         
         num_cor = 0
-        loader = copy.deepcopy(source_loader)
         temp_model = copy.deepcopy(adapt_model)
+        # loader = load_imagenetc(args.batch_size, 1, args.data_corruption, args.if_shuffle, [source])
+        loader = copy.deepcopy(source_loader)
         for data, label in loader:
             data, label = data.cuda(), label.cuda()
             with torch.no_grad():
@@ -167,6 +169,6 @@ if __name__ == '__main__':
             _, predicted = torch.max(rst.data, 1)
             correct = predicted.eq(label.data).cpu().sum()
             num_cor += correct
-        
-        print(f'{num_cor/len(loader):.4}')
+        print(num_cor)
+        print(f'{100*num_cor/len(loader.dataset):.4}')
     
