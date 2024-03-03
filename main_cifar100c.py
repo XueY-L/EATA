@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=3 python3 main_cifar100c.py
+CUDA_VISIBLE_DEVICES=0 python3 main_cifar100c.py
 '''
 
 from logging import debug
@@ -88,45 +88,33 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
+    source = 'gaussian_noise'
     subnet = load_model('Hendrycks2020AugMix_ResNeXt', './ckpt', 'cifar100', ThreatModel.corruptions).cuda()
-    subnet.load_state_dict(torch.load('/home/yxue/model_fusion_tta/cifar/checkpoint/ckpt_cifar100_[\'jpeg_compression\']_[1].pt')['model'])
+    subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/cifar/checkpoint/ckpt_cifar100_[\'{source}\']_[1].pt')['model'])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output, exist_ok=True)
 
     logger = get_logger(name="project", output_directory=args.output, log_name=time.strftime("%Y-%m-%d-%H-%M-%S", time.localtime())+"-log.txt", debug=False)
     
-    # ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
     common_corruptions = ['gaussian_noise', 'shot_noise', 'impulse_noise', 'defocus_blur', 'glass_blur', 'motion_blur', 'zoom_blur', 'snow', 'frost', 'fog', 'brightness', 'contrast', 'elastic_transform', 'pixelate', 'jpeg_compression']
     logger.info(args)
-
-    if args.exp_type == 'continual':  # 在每个域推理完成后，测一下original情况
-        # common_corruptions = [[item, 'original'] for item in common_corruptions]
-        # common_corruptions = [subitem for item in common_corruptions for subitem in item]  #在common_corruptions的每项后面都加了个'original'
-        pass
-    elif args.exp_type == 'each_shift_reset':
-        print("continue")
-    else:
-        assert False, NotImplementedError
-    logger.info(common_corruptions)
     
     if args.algorithm == 'eata':
         # compute fisher informatrix
-        args.corruption = 'original'
+        args.corruption = source
 
-        fisher_loader = prepare_cifar100_test_data(args)
-
+        # fisher_loader = prepare_cifar100_test_data(args)
         subnet = eata.configure_model(subnet)
         params, param_names = eata.collect_params(subnet)
         ewc_optimizer = torch.optim.SGD(params, 0.001)
         fishers = {}
         train_loss_fn = nn.CrossEntropyLoss().cuda()
-        for iter_, (images, targets) in enumerate(fisher_loader, start=1):
-            if iter_ == args.fisher_size // args.batch_size: break  # 用少量样本算fisher
-            if args.gpu is not None:
-                images = images.cuda(non_blocking=True)
-            if torch.cuda.is_available():
-                targets = targets.cuda(non_blocking=True)
+
+        x_test, y_test = load_cifar100c(10000, 1, '/home/yxue/datasets', False, [source])
+        for iter_ in range(1, args.fisher_size // args.batch_size+1):
+            images = x_test[iter_ * args.batch_size:(iter_ + 1) * args.batch_size].cuda(non_blocking=True)
+            targets = y_test[iter_ * args.batch_size:(iter_ + 1) * args.batch_size].cuda(non_blocking=True)
             outputs = subnet(images)
             _, targets = outputs.max(1)
             loss = train_loss_fn(outputs, targets)
@@ -137,7 +125,7 @@ if __name__ == '__main__':
                         fisher = param.grad.data.clone().detach() ** 2 + fishers[name][0]
                     else:
                         fisher = param.grad.data.clone().detach() ** 2
-                    if iter_ == len(fisher_loader):
+                    if iter_ == args.fisher_size // args.batch_size:
                         fisher = fisher / iter_
                     fishers.update({name: [fisher, param.data.clone().detach()]})
             ewc_optimizer.zero_grad()
@@ -164,5 +152,5 @@ if __name__ == '__main__':
 
                 output = adapt_model(x_curr)
                 acc += (output.max(1)[1] == y_curr).float().sum()
-        print(f'{acc.item() / x_test.shape[0]:.4}', end=' ')
+        print(f'{acc.item()*100 / x_test.shape[0]:.4}')
     

@@ -1,5 +1,5 @@
 '''
-CUDA_VISIBLE_DEVICES=2 python3 main_imagenetc_5kSamples_forget.py
+CUDA_VISIBLE_DEVICES=1 python3 main_imagenetc_5kSamples_forget.py
 '''
 
 import copy
@@ -85,7 +85,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source = 'gaussian_noise'
+    source = 'snow'
     subnet = load_model('Standard_R50', './ckpt', 'imagenet', ThreatModel.corruptions).cuda()
     subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/imagenet/checkpoint/ckpt_[\'{source}\']_[1].pt')['model'])
 
@@ -99,20 +99,20 @@ if __name__ == '__main__':
 
     if args.algorithm == 'eata':
         # compute fisher informatrix
-        # args.corruption = source
-        # fisher_loader = load_imagenetc(args.batch_size, 1, args.data_corruption, False, [source])
-        args.corruption = 'original'
-        fisher_dataset, fisher_loader = prepare_test_data(args)
-        fisher_dataset.set_dataset_size(args.fisher_size)
-        fisher_dataset.switch_mode(True, False)
+        args.corruption = source
+        fisher_loader = load_imagenetc(args.batch_size, 1, args.data_corruption, False, [source])
+        # args.corruption = 'original'
+        # fisher_dataset, fisher_loader = prepare_test_data(args)
+        # fisher_dataset.set_dataset_size(args.fisher_size)
+        # fisher_dataset.switch_mode(True, False)
 
         subnet = eata.configure_model(subnet)
         params, param_names = eata.collect_params(subnet)
         ewc_optimizer = torch.optim.SGD(params, 0.001)
         fishers = {}
         train_loss_fn = nn.CrossEntropyLoss().cuda()
-        for iter_, (images, targets, _) in enumerate(fisher_loader):
-            if iter_ == args.fisher_size // args.batch_size:
+        for iter_, (images, targets, _) in enumerate(fisher_loader, start=1):
+            if iter_-1 == args.fisher_size // args.batch_size:
                 break
             if args.gpu is not None:
                 images = images.cuda(args.gpu, non_blocking=True)
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     else:
         assert False, NotImplementedError
 
-    dataset = ImageFolder(f'/home/yxue/datasets/ImageNet-C/{source}/1', transforms.Compose([ # transforms.Resize(256),
+    dataset = ImageFolder(f'/home/yxue/datasets/ImageNet-C/{source}/1', transforms.Compose([ transforms.Resize(256),
                                          transforms.CenterCrop(224),
                                          transforms.ToTensor()]))
     source_loader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, num_workers=32)
@@ -158,17 +158,15 @@ if __name__ == '__main__':
             num_cor += correct
         print(f'{num_cor/5000*100:.4}')
         
-        num_cor = 0
-        temp_model = copy.deepcopy(adapt_model)
-        # loader = load_imagenetc(args.batch_size, 1, args.data_corruption, args.if_shuffle, [source])
-        loader = copy.deepcopy(source_loader)
-        for data, label in loader:
-            data, label = data.cuda(), label.cuda()
-            with torch.no_grad():
-                rst = temp_model(data)
-            _, predicted = torch.max(rst.data, 1)
-            correct = predicted.eq(label.data).cpu().sum()
-            num_cor += correct
-        print(num_cor)
-        print(f'{100*num_cor/len(loader.dataset):.4}')
+        # num_cor = 0
+        # temp_model = copy.deepcopy(adapt_model)
+        # loader = copy.deepcopy(source_loader)
+        # for data, label in loader:
+        #     data, label = data.cuda(), label.cuda()
+        #     with torch.no_grad():
+        #         rst = temp_model(data)
+        #     _, predicted = torch.max(rst.data, 1)
+        #     correct = predicted.eq(label.data).cpu().sum()
+        #     num_cor += correct
+        # print(f'{100*num_cor/len(loader):.4}')
     
