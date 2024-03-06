@@ -1,7 +1,8 @@
 '''
-CUDA_VISIBLE_DEVICES=0 python3 main_cifar100c.py
+CUDA_VISIBLE_DEVICES=0 python3 main_cifar100c.py --source gaussian_noise --batch_size 200
 '''
 
+import copy
 from logging import debug
 import os
 import time
@@ -69,6 +70,8 @@ def get_args():
     # 'each_shift_reset' means after each type of distribution shift, e.g., ImageNet-C Gaussian Noise Level 5, the model parameters will be reset.
     parser.add_argument('--algorithm', default='eata', type=str, help='eata or eta or tent')  # eta不加权重正则
 
+    parser.add_argument('--source', default='', type=str, help='source domain')  # eta不加权重正则
+
     return parser.parse_args()
 
 
@@ -77,7 +80,6 @@ if __name__ == '__main__':
     args = get_args()
     args.data = '/home/yxue/datasets/cifar100/cifar-100-python'
     args.data_corruption = '/home/yxue/datasets/CIFAR-100-C'
-    args.batch_size = 200
     args.e_margin = math.log(100)*0.40
     args.d_margin = 0.4
     args.fisher_alpha = 1
@@ -88,7 +90,7 @@ if __name__ == '__main__':
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
-    source = 'gaussian_noise'
+    source = args.source
     subnet = load_model('Hendrycks2020AugMix_ResNeXt', './ckpt', 'cifar100', ThreatModel.corruptions).cuda()
     subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/cifar/checkpoint/ckpt_cifar100_[\'{source}\']_[1].pt')['model'])
 
@@ -137,20 +139,37 @@ if __name__ == '__main__':
     else:
         assert False, NotImplementedError
 
+    res, res_forget = [], []
     for corrupt in common_corruptions:
         x_test, y_test = load_cifar100c(10000, 5, '/home/yxue/datasets', False, [corrupt])
         x_test, y_test = x_test.cuda(), y_test.cuda()
 
-        acc = 0.
+        cor = 0.
         n_batches = math.ceil(x_test.shape[0] / args.batch_size)
         with torch.no_grad():
             for counter in range(n_batches):
-                x_curr = x_test[counter * args.batch_size:(counter + 1) *
-                        args.batch_size].cuda()
-                y_curr = y_test[counter * args.batch_size:(counter + 1) *
-                        args.batch_size].cuda()
+                x_curr = x_test[counter * args.batch_size:(counter + 1) * args.batch_size].cuda()
+                y_curr = y_test[counter * args.batch_size:(counter + 1) * args.batch_size].cuda()
 
                 output = adapt_model(x_curr)
-                acc += (output.max(1)[1] == y_curr).float().sum()
-        print(f'{acc.item()*100 / x_test.shape[0]:.4}')
-    
+                cor += (output.max(1)[1] == y_curr).float().sum()
+        acc = cor / x_test.shape[0]
+        res.append(round(acc.item(), 4))
+
+        x_test, y_test = load_cifar100c(10000, 1, '/home/yxue/datasets', False, [source])
+        x_test, y_test = x_test.cuda(), y_test.cuda()
+
+        cor = 0.
+        n_batches = math.ceil(x_test.shape[0] / args.batch_size)
+        temp_model = copy.deepcopy(adapt_model)
+        with torch.no_grad():
+            for counter in range(n_batches):
+                x_curr = x_test[counter * args.batch_size:(counter + 1) * args.batch_size].cuda()
+                y_curr = y_test[counter * args.batch_size:(counter + 1) * args.batch_size].cuda()
+
+                output = temp_model(x_curr)
+                cor += (output.max(1)[1] == y_curr).float().sum()
+        acc = cor / x_test.shape[0]
+        res_forget.append(round(acc.item(), 4))
+        
+        print(res, res_forget)
