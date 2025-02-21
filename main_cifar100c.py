@@ -35,8 +35,8 @@ def get_args():
     parser = argparse.ArgumentParser(description='PyTorch ImageNet-C Testing')
 
     # path of data, output dir
-    parser.add_argument('--data', default='/home/yxue/datasets/ILSVRC', help='path to dataset')
-    parser.add_argument('--data_corruption', default='/home/yxue/datasets', help='path to corruption dataset')
+    parser.add_argument('--data', default='/home/yuanxue/data/ILSVRC', help='path to dataset')
+    parser.add_argument('--data_corruption', default='/home/yuanxue/data', help='path to corruption dataset')
     parser.add_argument('--output', default='etta_exps/camera_ready_debugs', help='the output directory of this experiment')
 
     # general parameters, dataloader parameters
@@ -78,8 +78,8 @@ def get_args():
 if __name__ == '__main__':
 
     args = get_args()
-    args.data = '/home/yxue/datasets/cifar100/cifar-100-python'
-    args.data_corruption = '/home/yxue/datasets/CIFAR-100-C'
+    args.data = '/home/yuanxue/data/cifar100/cifar-100-python'
+    args.data_corruption = '/home/yuanxue/data/CIFAR-100-C'
     args.e_margin = math.log(100)*0.40
     args.d_margin = 0.4
     args.fisher_alpha = 1
@@ -92,7 +92,7 @@ if __name__ == '__main__':
 
     source = args.source
     subnet = load_model('Hendrycks2020AugMix_ResNeXt', './ckpt', 'cifar100', ThreatModel.corruptions).cuda()
-    subnet.load_state_dict(torch.load(f'/home/yxue/model_fusion_tta/cifar/checkpoint/ckpt_cifar100_[\'{source}\']_[1].pt')['model'])
+    subnet.load_state_dict(torch.load(f'/home/yuanxue/SAR/ckpt/cifar100/corruptions/ckpt_cifar100_[\'{source}\']_[1].pt')['model'])
 
     if not os.path.exists(args.output):
         os.makedirs(args.output, exist_ok=True)
@@ -113,7 +113,7 @@ if __name__ == '__main__':
         fishers = {}
         train_loss_fn = nn.CrossEntropyLoss().cuda()
 
-        x_test, y_test = load_cifar100c(10000, 1, '/home/yxue/datasets', False, [source])
+        x_test, y_test = load_cifar100c(10000, 1, '/home/yuanxue/data', False, [source])
         for iter_ in range(1, args.fisher_size // args.batch_size+1):
             images = x_test[iter_ * args.batch_size:(iter_ + 1) * args.batch_size].cuda(non_blocking=True)
             targets = y_test[iter_ * args.batch_size:(iter_ + 1) * args.batch_size].cuda(non_blocking=True)
@@ -140,8 +140,9 @@ if __name__ == '__main__':
         assert False, NotImplementedError
 
     res, res_forget = [], []
+    t1 = time.time()
     for corrupt in common_corruptions:
-        x_test, y_test = load_cifar100c(10000, 5, '/home/yxue/datasets', False, [corrupt])
+        x_test, y_test = load_cifar100c(10000, 5, '/home/yuanxue/data', False, [corrupt])
         x_test, y_test = x_test.cuda(), y_test.cuda()
 
         cor = 0.
@@ -156,7 +157,7 @@ if __name__ == '__main__':
         acc = cor / x_test.shape[0]
         res.append(round(acc.item(), 4))
 
-        x_test, y_test = load_cifar100c(10000, 1, '/home/yxue/datasets', False, [source])
+        x_test, y_test = load_cifar100c(10000, 1, '/home/yuanxue/data', False, [source])
         x_test, y_test = x_test.cuda(), y_test.cuda()
 
         cor = 0.
@@ -173,3 +174,6 @@ if __name__ == '__main__':
         res_forget.append(round(acc.item(), 4))
         
         print(res, res_forget)
+    t2 = time.time()
+    logger.info(f'Time: {t2-t1}s')
+    
